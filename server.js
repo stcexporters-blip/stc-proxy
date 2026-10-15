@@ -65,14 +65,33 @@ app.post('/db/shipments', (req, res) => {
 app.post('/db/shipment', (req, res) => {
   const db = readDB();
   const shipment = req.body;
-  const idx = db.shipments.findIndex(s => s.awb === shipment.awb);
-  if (idx >= 0) {
-    db.shipments[idx] = shipment;
-  } else {
+  // Client portal submissions have no AWB - assign temp ID
+  if (!shipment.awb) {
+    shipment.awb = '';
+    shipment.tempId = shipment.tempId || ('TMP' + Date.now());
     db.shipments.unshift(shipment);
+  } else {
+    const idx = db.shipments.findIndex(s => s.awb === shipment.awb || (s.tempId && s.tempId === shipment.tempId));
+    if (idx >= 0) {
+      db.shipments[idx] = shipment;
+    } else {
+      db.shipments.unshift(shipment);
+    }
   }
   writeDB(db);
   res.json({ ok: true });
+});
+
+// PATCH update shipment fields (payment, awb, status)
+app.patch('/db/shipment/:id', (req, res) => {
+  const db = readDB();
+  const id = req.params.id;
+  const updates = req.body;
+  const idx = db.shipments.findIndex(s => s.awb === id || s.tempId === id || String(s.id) === id);
+  if (idx < 0) return res.status(404).json({ error: 'Not found' });
+  db.shipments[idx] = Object.assign(db.shipments[idx], updates);
+  writeDB(db);
+  res.json({ ok: true, shipment: db.shipments[idx] });
 });
 
 // DELETE single shipment
